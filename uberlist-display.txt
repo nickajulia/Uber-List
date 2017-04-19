@@ -1,0 +1,11 @@
+function my_get_posts( $query ) {
+
+    // Use the line below if you want to display Uber List Posts on the home page AND the blog page
+    //if ( ( is_home() && $query->is_main_query() ) || is_feed() )
+
+    if ( is_home() && $query->is_main_query() )
+        $query->set( 'post_type', array( 'guide', ) );
+
+
+    return $query;
+}
