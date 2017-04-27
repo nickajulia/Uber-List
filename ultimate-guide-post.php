@@ -40,7 +40,7 @@ function tkugp_scripts(){
 		wp_enqueue_style( 'tkugp-guide-post', plugins_url( 'css/admin-guide-post.css', __FILE__));
 		wp_enqueue_media();
 		wp_enqueue_script( 'tkugp-suggest', plugins_url( 'js/jquery.suggest.js', __FILE__), array('jquery') );
-		wp_enqueue_script( 'tkugp-guide-post', plugins_url( 'js/admin-guide-post.js', __FILE__), array('jquery') );
+		wp_enqueue_script( 'tkugp-guide-post', plugins_url( 'js/admin-guide-post.js', __FILE__), array('jquery'), time() );
 		wp_enqueue_script('jquery-ui-sortable');
 		wp_enqueue_script('jquery');
 		
@@ -211,8 +211,8 @@ function tkugp_post_type() {
 		'description'         => __( 'Uber List Post', 'tkugp' ),
 		'labels'              => $labels,
 		'supports'            => array( 'title', 'thumbnail', 'comments', 'editor'),
-		'taxonomies'          => array( TKUGP_POST . '_cat', TKUGP_POST . '_tag' ),
-		'hierarchical'        => false,
+		'taxonomies'          => array( TKUGP_POST . '_cat', TKUGP_POST . '_tag'),
+		'hierarchical'        => true,
 		'public'              => true,
 		'show_ui'             => true,
 		'show_in_menu'        => true,
@@ -283,6 +283,51 @@ function tkugp_bottomcontent_html($post){
 function tkugp_categoryitem_html( $post) {
 
 	$items = get_post_meta( $post->ID, 'tkugp_category_item', true);
+	
+	//Unlink any CATEGORIES or TAGS that are not found in the POST META
+	$cat_terms = wp_get_object_terms( $post->ID,  TKUGP_POST . "_cat" );
+	$tag_terms = wp_get_object_terms( $post->ID,  TKUGP_POST . "_tag" );
+	
+	
+		// Category
+	foreach($cat_terms as $term){
+		 $found = false;
+		 
+		 
+		 foreach($items as $meta){
+		 	
+		 	if ( $meta['title'] == $term->name)
+		 		$found = true;
+		 
+		 }
+		 
+		 if ($found == false){
+		 	wp_remove_object_terms( $post->ID, $term->term_id, TKUGP_POST . "_cat" );
+		 	
+		 }
+		 	
+		 
+	}
+	
+		//Tags
+	foreach($tag_terms as $term){
+		 $found = false;
+		 
+		 
+		 foreach($items as $meta){
+		 	
+		 	if ( in_array( $term->term_id, $meta['tags']))
+		 			$found = true;
+		 
+		 }
+		 
+		 if ($found == false){
+		 	wp_remove_object_terms( $post->ID, $term->term_id, TKUGP_POST . "_tag" );
+		 	
+		 }
+		 	
+		 
+	} // End Unlink
 	
 	$html = '';
 	if( !empty($items) ){
@@ -419,6 +464,7 @@ function tkugp_list_item_save( $post_id ) {
 			
 				$category_items[] = array(
 							'title' => $item['title'],
+							'cat_id'=> $item['cat_id'],
 							'tags' 	=> $item['tag']
 							);
 
@@ -467,7 +513,10 @@ function tkugp_category_all( $selected=''){
 	    'pad_counts'        => false, 
 	    'offset'            => '', 
 	    'search'            => '', 
-	    'cache_domain'      => 'core'
+	    'cache_domain'      => 'core',
+	    //adding herer
+	    'hide_empty'        => '0',
+	    'number'			=> '1'
 	); 
 
 	$terms = get_terms($taxonomies, $args);
@@ -568,7 +617,7 @@ function tkugp_category_tags($ID, $item){
 }
 
 
-function tkugp_category_item_html($ID, $item){
+function tkugp_category_item_html($ID, $item){ 
 
 		$tags_list = tkugp_category_tags($ID, $item);
 		$new_category_item = '';
@@ -578,7 +627,8 @@ function tkugp_category_item_html($ID, $item){
 		$new_category_item .='<div class="inside">';
 		$new_category_item .='<div class="form-field">';
 		$new_category_item .='<label>Title</label>';
-		$new_category_item .='<input type="text" value="'.$item['title'].'" id="tkugp_category_item_title_'.$ID.'" name="tkugp_category_item['.$ID.'][title]" />';
+		$new_category_item .='<input type="text" class="tkugp_category_item_add_category" value="'.$item['title'].'" id="tkugp_category_item_title_'.$ID.'" name="tkugp_category_item['.$ID.'][title]" />';
+		$new_category_item .='<input type="hidden"  value="'.$item['cat_id'].'" id="tkugp_category_item_cat_id_'.$ID.'" name="tkugp_category_item['.$ID.'][cat_id]" />';
 		$new_category_item .='</div>';
 		$new_category_item .='<div>';
 		$new_category_item .='<label>Add Tag</label>';
@@ -790,44 +840,75 @@ function tkugp_category_selected_item($ID, $category){
 add_action('wp_ajax_tkugp_admin_addcategory' , 'ajax_tkugp_category');
 function ajax_tkugp_category(){
 
-	$catname = $_POST['catname'];
-	$post_id = $_POST['postid'];
-
-
+	$catname = $_REQUEST['catname'];
+	$post_id = $_REQUEST['postid'];
+	$unlink = $_REQUEST['unlink']; // expects the cat name, from a JS ajax call.
+	
 	$status  = array('msg' =>'', 'status' =>'');
 
 	if( $post_id && '' != $post_id ){
-
-			$term = term_exists($catname, TKUGP_POST . '_cat' );
-
-		if ($term !== 0 && $term !== null) {
+			
+			//If Unlink CAT comand is received, unlink the TAG from the post
+			if (isset($unlink)){
 				
-			$status = array('msg' => 'Error: Category already exist.', 'status' => 2, 'catid' => $term['term_id'] );
-
-		} else {
-
+				$cattitle =  $unlink;
+				$unlink = term_exists($unlink , TKUGP_POST . '_cat' );
+				
+				//Remove WP taxonomies relattion
+				wp_remove_object_terms( $post_id, (int)$unlink["term_id"] , TKUGP_POST . "_cat" );
+				
+				// I have to unlink all the sub tags found in the post meta.
+				$post_meta = get_post_meta( $post_id, 'tkugp_category_item', true);
+				foreach($post_meta as $meta){
+					if ($cattitle == $meta["title"]){
+						foreach($meta["tags"] as $meta_tag){
+							wp_remove_object_terms( $post_id, (int)$meta_tag , TKUGP_POST . "_tag" );
+				
+						}
+							
+					}
+				}
+				
+				//After the WP taxonomies is clear , I update the post metadata
+				$catname = $cattitle;
+				$tag_id = '' ;
+				$unlink_command = true;
+				$r = tkugpUpdatePostMetaArray($post_id, $catname  , $tag_id, $unlink_command);
+								
+				$status = array('msg' => $r ? 'Category was unlinked from post' : $r, 'status' => 1 );								
+				
+				die(json_encode($status));
+			} //End Unlink
+		
+			// Inserting a Category in WP taxonomy and Post Meta
 			$terms = wp_insert_term($catname, TKUGP_POST . '_cat');
 
 			if ( is_wp_error( $terms ) ) {
 				
-				$status = array('msg' => 'Error: Adding new category.', 'status' => 0 );	
-
-			} else {
+				$status = array('msg' => 'Error: Adding new category.', 'status' => 2 );	
+			}
+			
+			$terms = term_exists($catname, TKUGP_POST . '_cat');
+			
+			if (isset($terms["term_id"])) {
 
 
 				if( !tkugp_set_termcat($post_id, $terms['term_id']) ){
-
+					
+					
 					$status = array('msg' => 'Error: Could not assign category to post.', 'status' => 0);	
 				
 				} else {
-
-					$status = array('msg' => 'Success: New category added and assigned to post.', 'status' => 1, 'catid' => $terms['term_id']);	
+					
+					$r = tkugpUpdatePostMetaArray($post_id,$catname);
+					
+					$status = array('msg' => $r ? 'Success: New category added and assigned to post.' : $r, 'status' => 1, 'catid' => $terms['term_id']);	
 				
 				}
 
 			}
 
-		}
+		
 
 	} else {
 
@@ -843,48 +924,68 @@ add_action('wp_ajax_tkugp_admin_addtag' , 'tkugp_admin_addtag');
 
 function tkugp_admin_addtag(){
 
-	$tagname = $_POST['tagname'];
-	$post_id = $_POST['postid'];
-
-
+	$tagname = $_REQUEST['tagname'];
+	$post_id = $_REQUEST['postid'];
+	$catname = $_REQUEST['catname']; 
+	$unlink = $_REQUEST['unlink']; // expects the tag ID to be unlinked, from a JS ajax call.
 	$status  = array('msg' =>'', 'status' =>'');
 
+
 	if( $post_id && '' != $post_id ){
-
-			$term = term_exists($tagname, TKUGP_POST . '_tag' );
-
-		if ($term !== 0 && $term !== null) {
+			
+			//If Unlink comand is received, unlink the TAG from the post
+			if (isset($unlink)){
 				
-			$status = array('msg' => 'Error: Tag already exist.', 'status' => 2, 'tagid' => $term['term_id'] );
-
-		} else {
-
+				
+				wp_remove_object_terms( $post_id, (int)$unlink , TKUGP_POST . "_tag" );
+				$catname = '';
+				$tag_id = $unlink ;
+				$unlink_command = true;
+				$r = tkugpUpdatePostMetaArray($post_id, $catname, $tag_id ,$unlink_command );
+			
+				$status = array('msg' => $r ? 'Tag was unlinked from post' : $r , 'status' => 1 );
+				die(json_encode($status));
+			} //End Unlink
+			
+			// Insert a Tag in the WP Taxonomy and Post Meta 
+			$cat_id = term_exists($catname, TKUGP_POST . '_cat' );
+			
+	
 			$terms = wp_insert_term($tagname, TKUGP_POST . '_tag');
 
 			if ( is_wp_error( $terms ) ) {
-				
-				$status = array('msg' => 'Error: Adding new tag.', 'status' => 0 );	
-
-			} else {
+					$status = array('msg' => 'Error: Adding new tag.', 'status' => 2 );	
+					}
+			
+			$terms = term_exists($tagname, TKUGP_POST . '_tag');	
+			
+			if(isset($terms["term_id"])) {
 
 
 				if( !tkugp_set_termtag($post_id, $terms['term_id']) ){
 
-					$status = array('msg' => 'Error: Could not assign tag to post.', 'status' => 0);	
+					$status = array('msg' => 'Error: Could not assign tag to post.', 'status' => 2);	
 				
 				} else {
 
 					$status = array('msg' => 'Success: New tag added and assigned to post.', 'status' => 1, 'tagid' => $terms['term_id']);	
-				
+					
+					// Update the metadata on the POST ID to add category and tag combination
+					if (isset($cat_id)){
+							tkugpUpdatePostMetaArray($post_id,$catname,$terms['term_id']);					
+					} else {
+						//Change the response status and code 
+						$status['msg'] = 'Error: Category title was not saved or empty';
+						$status['status'] = '2'; //Error
+						
+					} 
 				}
 
-			}
-
-		}
+			}		
 
 	} else {
 
-		$status = array('msg' => 'Error: Not a valid post id.', 'status' => 0 );
+		$status = array('msg' => 'Error: Not a valid post id.', 'status' => 2 );
 	}
 
 
@@ -895,9 +996,22 @@ function tkugp_set_termcat($post_id, $cat_id){
 
 	// ID of category we want this post to have.
 	$cat_id = $cat_id;
-
-	$term_taxonomy_ids = wp_set_object_terms( $post_id, $cat_id, TKUGP_POST . '_cat' );
-
+	
+	//Looking inside meta if the CAT is already in.
+	$post_meta = get_post_meta( $post_id, 'tkugp_category_item', true);
+	$found = false;
+	foreach($post_meta as $meta){
+		if($meta['cat_id'] == $cat_id){
+				$found = true;
+				return false; //The cat is already found in the Post meta. Stop.
+			}
+			
+		}
+	
+	if ($found==false) 
+		$term_taxonomy_ids = wp_set_object_terms( $post_id, (int)$cat_id, TKUGP_POST . '_cat', TRUE );
+	
+		
 	if ( is_wp_error( $term_taxonomy_ids ) ) {
 		return false;
 	} else {
@@ -911,9 +1025,22 @@ function tkugp_set_termtag($post_id, $tag_id){
 
 	// ID of tag we want this post to have.
 	$tag_id = $tag_id;
-
-	$term_taxonomy_ids = wp_set_object_terms( $post_id, $tag_id, TKUGP_POST . '_tag' );
-
+	
+	//Looking inside meta if the tag is already in.
+	$post_meta = get_post_meta( $post_id, 'tkugp_category_item', true);
+	$found = false;
+	foreach($post_meta as $meta){
+		foreach($meta['tags'] as $tag)
+			if($tag == $tag_id){
+				$found = true;
+				return false; //The tag is already found in the Post meta. Stop.	
+			}
+				
+		}
+	
+	if ($found==false)
+		$term_taxonomy_ids = wp_set_object_terms( $post_id, (int)$tag_id, TKUGP_POST . '_tag', TRUE );
+		
 	if ( is_wp_error( $term_taxonomy_ids ) ) {
 		return false;
 	} else {
@@ -1120,11 +1247,11 @@ function tkugp_the_content_item($item){
 	return $content;
 }
 
-//sidebar 
-if ( !function_exists('dynamic_sidebar') || !dynamic_sidebar($index) );
-
-
-
+/* 
+******
+	Helper functions
+******
+*/
 
 function tkugpaddhttp($url) {
     if (!preg_match("~^(?:f|ht)tps?://~i", $url)) {
@@ -1133,6 +1260,91 @@ function tkugpaddhttp($url) {
     return $url;
 }
 
+
+function tkugpUpdatePostMetaArray($post_id, $catname='' , $tag_id ='', $unlink= false){
+	
+	$post_category_array = get_post_meta( $post_id, 'tkugp_category_item', true);
+	
+	//Unlink
+	if ($unlink){
+		if ($catname != '' and $tag_id == ''){
+			//Remove Category from META
+			foreach($post_category_array as $key => $meta){
+				if ($meta['title'] == $catname)
+					unset($post_category_array[$key]);
+			}
+		}
+		if ($catname == '' and $tag_id != ''){
+			//Remove Tag from META
+			foreach($post_category_array as &$meta){
+				foreach($meta['tags'] as $key => $tag){
+					if((int)$tag == (int)$tag_id)
+						unset($meta['tags'][$key]);
+				}
+			}
+		}
+		
+				
+		if (false != update_post_meta($post_id, 'tkugp_category_item', $post_category_array)){
+			return true;
+		} else {
+			return false;
+		}
+	
+	} // End Unlink
+	
+	//Add Cat when only the cat name is passed
+	if ($catname != '' and $tag_id == ''){
+		$found_cat = false;
+		foreach($post_category_array as $meta){
+			if($catname == $meta["title"])
+				$found_cat = true;
+		}
+		if ($found_cat == false){
+				$cat_id = term_exists($catname, TKUGP_POST . '_cat' );
+				$post_category_array[] = array('title' => $catname,
+												'cat_id'=> $cat_id,
+												'tags' => array());	
+		}
+		
+		if (false != update_post_meta($post_id, 'tkugp_category_item', $post_category_array)){
+			return true;
+		} else {
+			return false;
+		}
+	}
+		
+	
+	// Ading Tag when both catname and tag params are passed
+	if ($catname == '')
+		return 'UpdatePostMetaArray: Category Title was not passed';
+	
+	$cat_id = term_exists($catname, TKUGP_POST . '_cat' );
+	
+	if ($tag_id == '')
+		return 'UpdatePostMetaArray: Tag ID was not passed';
+	
+	
+		
+	//Search Catname in MetaArray
+	foreach($post_category_array as &$cat)
+		{
+
+			if($cat['title'] == $catname){
+				// Add the new cat_id to the cat array 
+				$cat['tags'][] = $tag_id;
+				//eliminate the duplicates
+				$cat['tags'] = array_unique	($cat['tags']);
+			}
+		}
+	
+	if (false != update_post_meta($post_id, 'tkugp_category_item', $post_category_array)){
+		return true;
+	} else {
+		return false;
+	}
+	 		
+}
 
 /**
 *
@@ -1167,8 +1379,6 @@ function tkugp_plugin_admin_notices() {
 
   	<?php
   }
-
-
 
 
 }
@@ -1230,13 +1440,12 @@ function tkugp_sync_guide(){
 								3 => "FORTH_CATEGORY",
 								4 => "FIFTH_CATEGORY"
 							);
+		 $all_tag_id_array = null; //This array holds the assigned tag ids for the item.
 		
 		
 		
-		
-		//  (5 categories)
-		foreach ($sheet_cat_columns as $position => $sheet_col_name)
-		{
+		//Process the tags added in the CATEGORY columns.
+		foreach ($sheet_cat_columns as $sheet_col_name){
 						
 			if ($_POST[$sheet_col_name]) {
 				
@@ -1282,77 +1491,104 @@ function tkugp_sync_guide(){
 				
 				} //End For each tag
 			
-			   //Build the Cat Array
-			   $category_items_array[$position] = array(
-								'title' => $sheet_col_name,
-								'tags' 	=> $tag_id_array //array
-								);
 				
 		       //Build all the tag_id
-				foreach($tag_id_array as $tag_id) 
+				foreach($tag_id_array as $tag_id) {
 					$all_tag_id_array[] = $tag_id; 
-				
+				}
+					
+			$meta_post = get_post_meta( $post_id, 'tkugp_category_item', true);
 			
-			} //end if Sheet colum has POST values
+			if ($meta_post == false)
+				$meta_post = array(); //init metapost array
+
 			
-		} //end foreach Sheet Category Column 
-		
-		
-		$category_items = get_post_meta( $post_id, 'tkugp_category_item');
-				
-		if ($category_items == false) {
-			$category_items = array();
-		} else {
-			$category_items = $category_items[0]; //adjustment
-		}
-		
-		foreach($category_items_array as $position => $value) {
-			if ($category_items[$position]['title']) {
-					//append the tags only
-					foreach($category_items_array[$position]['tags'] as $tag_id) {
-						$category_items[$position]['tags'][] = $tag_id;
-						
-					}
-					//Remove any duplicate tags just added
-					$category_items[$position]['tags'] = array_unique($category_items[$position]['tags']);
-			} else {
-				$category_items[] = array(
-								'title' => $value['title'],
-								'tags' 	=> $value['tags'] //array
-								);
+			//Search for $sheet_col_name in the Meta info
+			$meta_key_found = false;
+			foreach($meta_post as $key => $meta){
+				if($meta['title'] == $sheet_col_name){
+					$meta_key_found = $key;
+				}
 			}
 			
-		}
-		
-					
+
+			if ($meta_key_found !== false){
+				// $sheet_col_name was found in the meta post
+				// add the tags one by one and make the array unique
+					foreach ($tag_id_array as $tag){
+						$meta_post[$meta_key_found]['tags'][] = $tag;
+					}
+						
+				//Remove any duplicate tags just added
+				$meta_post[$meta_key_found]['tags'] = array_unique($meta_post[$meta_key_found]['tags']);
+			
+			} else {
+				//$sheet_col_name was not found so we need to add it. 
 				
+				$meta_post[] = array(
+							'title' => $sheet_col_name,
+							'cat_id' => (int)$cat_id['term_id'],
+							'tags' 	=> $tag_id_array //array
+							);
+					
+			}
+								
+			update_post_meta($post_id, 'tkugp_category_item', $meta_post);
+
+			
+		  } //end if Sheet colum has POST values
+			
+						
+		} //end foreach Sheet Category Column 
+			
+		
+		
+		
+		// APPEND/UPDATE ITEM
+		$meta_list_items = get_post_meta( $post_id, 'tkugp_list_item', TRUE);
+			
+		if ($meta_list_items == false) 
+			$meta_list_items = array();
+		
+		//Search for $sheet_col_name in the Meta info
+		$meta_list_key_found = false;
+		foreach($meta_list_items as $key => $item){
+			if($item['title'] == $_POST['post_item_title']){
+				$meta_list_key_found = $key;
+			}
+		}
 		
 
-		//echo serialize($category_items);
-		update_post_meta($post_id, 'tkugp_category_item', $category_items);
+		if ($meta_list_key_found !== false){
+			$meta_list_items[$meta_list_key_found] = array(
+					'title' 		=> sanitize_text_field($_POST['post_item_title']),
+					'content' 		=> sanitize_text_field($_POST['post_item_content']),
+					'tags' 			=> $all_tag_id_array,
+					'favrt' 		=> 'no',
+					'image' 		=> sanitize_text_field($_POST['post_item_image']),
+					'link' 			=> array('title' => sanitize_text_field($_POST['post_item_link_label']),
+											 'url' => sanitize_text_field($_POST['post_item_website'])
+											 )
+				);
+		} else {
+			// add the Items array
+			$meta_list_items[] = array(
+					'title' 		=> sanitize_text_field($_POST['post_item_title']),
+					'content' 		=> sanitize_text_field($_POST['post_item_content']),
+					'tags' 			=> $all_tag_id_array,
+					'favrt' 		=> 'no',
+					'image' 		=> sanitize_text_field($_POST['post_item_image']),
+					'link' 			=> array('title' => sanitize_text_field($_POST['post_item_link_label']),
+											 'url' => sanitize_text_field($_POST['post_item_website'])
+											 )
+				);
+		}
 		
-		// APPEND ITEM
-		$list_items = get_post_meta( $post_id, 'tkugp_list_item');
-			
-			if ($list_items == false) {
-				$list_items = array();
-			} else {
-				$list_items = $list_items[0]; //adjustment
-			}
-		// add the Items array
-		$list_items[] = array(
-				'title' 		=> sanitize_text_field($_POST['post_item_title']),
-				'content' 		=> sanitize_text_field($_POST['post_item_content']),
-				'tags' 			=> $all_tag_id_array,
-				'favrt' 		=> 'no',
-				'image' 		=> sanitize_text_field($_POST['post_item_image']),
-				'link' 			=> array('title' => sanitize_text_field($_POST['post_item_link_label']),
-										 'url' => sanitize_text_field($_POST['post_item_website'])
-										 )
-			);
+		
+		
 	
 		
-		update_post_meta($post_id, 'tkugp_list_item', $list_items);
+		update_post_meta($post_id, 'tkugp_list_item', $meta_list_items);
 		
 		
 				
@@ -1370,5 +1606,5 @@ function tkugp_sync_guide(){
 	
 	
 	
-} /// end sync function
+}
 

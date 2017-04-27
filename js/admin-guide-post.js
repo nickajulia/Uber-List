@@ -269,7 +269,8 @@ $(document).on('click', '#tkugp_add_category_item',function(e){
 		new_category_item +='<div class="inside">';
 		new_category_item +='<div class="form-field">';
 		new_category_item +='<label>Title</label>';
-		new_category_item +='<input type="text" value="" id="tkugp_category_item_title_'+ID+'" name="tkugp_category_item['+ID+'][title]" />';
+		new_category_item +='<input type="text" value="" class="tkugp_category_item_add_category" id="tkugp_category_item_title_'+ID+'" name="tkugp_category_item['+ID+'][title]" />';
+		new_category_item +='<input type="hidden" value="" id="tkugp_category_item_cat_id_'+ID+'" name="tkugp_category_item['+ID+'][cat_id]" />';
 		new_category_item +='</div>';
 		new_category_item +='<div>';
 		new_category_item +='<label>Add Tag</label>';
@@ -409,11 +410,38 @@ function tkugp_maybe_add_newtag(ID, tagid, tagname, type, catTitle, catID){
 	 	event.preventDefault();
 	 	var $this = $(this);
 	  	var ID = $this.attr('id').replace('tkugp_category_item_del_', '');
+	  	var cattitle = $('#tkugp_category_item_title_' + ID).val();
+	  	var post = $('#post_ID').val();
+	  	
 	  	$('#tkugp_new_category_item_'+ID).remove();
 	  	$('.tkugp_list_item').each(function(itemIndex, item) {
 	  		
 	  		$(this).find('#category_item_tag_choice_'+itemIndex+'_'+ID).remove();
 	  	});
+
+		//Make a call to WP Ajax to unlink the Category from the postid
+		
+		
+	  		  		  	
+	  	$.ajax({
+
+	  		url: ajaxurl,
+	  		type: 'POST',
+	  		dataType: 'json',
+	  		data: {action: 'tkugp_admin_addcategory', postid:post, unlink:cattitle },
+	  	})
+
+	  	.done(function(response){
+
+			console.log(response);
+	  		if( response.status == 1 ){	
+	  			//Success
+	  		} else if( response.status == 2 ) {
+	
+	  			alert(response.msg);
+	  		}	
+
+	  	}); // end Ajax
 
 	 });
 
@@ -438,6 +466,29 @@ function tkugp_maybe_add_newtag(ID, tagid, tagname, type, catTitle, catID){
 	  			$(this).remove();
 	  		}
 	  	});
+	  	
+	  	//Make a call to WP Ajax to unlin the tag from the postid
+	  	var post = $('#post_ID').val();
+	  	$.ajax({
+
+	  		url: ajaxurl,
+	  		type: 'POST',
+	  		dataType: 'json',
+	  		data: {action: 'tkugp_admin_addtag', postid:post, unlink:tagid },
+	  	})
+
+	  	.done(function(response){
+
+			console.log(response);
+	  		if( response.status == 1 ){	
+	  		
+	  		} else if( response.status == 2 ) {
+	
+	  			alert(response.msg);
+	  		}	
+
+	  	}); // end Ajax
+	  	
 
 	 });
 
@@ -647,8 +698,7 @@ function tkugp_maybe_add_newtag(ID, tagid, tagname, type, catTitle, catID){
 
 		e.preventDefault();
 
-
-
+		
 		$(this).closest('.postbox').fadeOut().remove();
 
 		
@@ -668,8 +718,8 @@ function tkugp_maybe_add_newtag(ID, tagid, tagname, type, catTitle, catID){
 
 
 		$('#tkgup_list_item_count').val(item_id);
-
-
+		
+		
 
 	});
 
@@ -852,8 +902,8 @@ function tkugp_maybe_add_newtag(ID, tagid, tagname, type, catTitle, catID){
 	}	
 
 
-$(document).on('keyup keypress', 'input.tkugp_category_item_add_tag', function(e){
-
+$(document).on('keyup', 'input.tkugp_category_item_add_tag', function(e){
+		
 
 		var code = e.keyCode || e.which;
 
@@ -872,7 +922,7 @@ $(document).on('keyup keypress', 'input.tkugp_category_item_add_tag', function(e
 	  		return false;
 
 	  	
-
+/*
 	  	var ret = false;
 	  	$this.prop('disabled', true);
 	  	var break_loop = false ;
@@ -913,21 +963,23 @@ $(document).on('keyup keypress', 'input.tkugp_category_item_add_tag', function(e
 
 	  	if( ret )
 	  		return false;
-
-
+*/
+			
+			
 	  	$.ajax({
 
 	  		url: ajaxurl,
 	  		type: 'POST',
 	  		dataType: 'json',
-	  		data: {action: 'tkugp_admin_addtag', postid:post, tagname:tag},
+	  		data: {action: 'tkugp_admin_addtag', postid:post, tagname:tag, catname:cattitle},
 	  	})
 
 	  	.done(function(response){
 
 	  		$this.prop('disabled', false);
 	  		$this.val('');
-
+			
+			//console.log(response);
 
 	  		if( response.status == 1 ){	
 	  			
@@ -938,8 +990,9 @@ $(document).on('keyup keypress', 'input.tkugp_category_item_add_tag', function(e
 	  		} else if( response.status == 2 ) {
 
 	  			//insert existed tag
-	  			tkugp_tags_haystack.push(tag);
-	  			tkugp_maybe_add_newtag(ID, response.tagid, tag, cattitle, catID);
+	  			alert(response.msg);
+	  			//tkugp_tags_haystack.push(tag);
+	  			//tkugp_maybe_add_newtag(ID, response.tagid, tag, cattitle, catID);
 	  		}	
 
 
@@ -952,7 +1005,62 @@ $(document).on('keyup keypress', 'input.tkugp_category_item_add_tag', function(e
 
 	});
 
+$(document).on('keyup', 'input.tkugp_category_item_add_category', function(e){
+		
+		var code = e.keyCode || e.which;
+		var $this = $(this);
+	  	var ID = $this.attr('id').replace('tkugp_category_item_title_', '');
+	  	var cat = $this.val();
+	  		cat = cat.trim();
+	  	var post = $('#post_ID').val();
+	  	var cattitle = $('#tkugp_category_item_title_'+ID).val() || '';
+	  	var cat_id = $('#tkugp_category_item_cat_id_'+ID).val() || '';
+	  	var catID = ID;
 
+  		if (code == 13) { 
+    		e.preventDefault();
+    		
+    	
+	  	
+	  	if( cat == '' )
+	  		return false;
+	  	
+	  		  	
+	  	$.ajax({
+
+	  		url: ajaxurl,
+	  		type: 'POST',
+	  		dataType: 'json',
+	  		data: {action: 'tkugp_admin_addcategory', postid:post, catname:cat},
+	  	})
+
+	  	.done(function(response){
+
+	  		$this.prop('disabled', false);
+	  		
+			
+			//console.log(response);
+
+	  		if( response.status == 1 ){	
+	  			
+	  			//inserted cat
+	  			alert(response.msg);
+	  			$('#tkugp_category_item_cat_id_'+ID).val(response.catid);
+	  			
+
+	  		} else if( response.status == 2 ) {
+
+	  			//existing cat
+	  			alert(response.msg);
+	  		}	
+
+
+
+	  	});
+	  	
+		} /* end code == 13 */
+		
+});
 
 $(document).on('keyup keypress', 'form#post input', function(e) {
 
@@ -970,6 +1078,7 @@ $(document).on('keyup keypress', 'form#post input', function(e) {
 
 
 });
+
 
 
 
