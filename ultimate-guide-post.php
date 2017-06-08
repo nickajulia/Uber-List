@@ -5,7 +5,7 @@ Description: Create expanded list posts that rank highly in google and get socia
 Plugin URI: http://www.mindheros.com
 Author: Nick Julia
 Author URI: http://www.mindheros.com/about
-Version: 2.0
+Version: 2.001
 notes: Added support for comments and list item name in admin
 License: GPL2
 Text Domain: tkugp
@@ -629,6 +629,7 @@ function tkugp_category_item_html($ID, $item){
 		$new_category_item .='<label>Title</label>';
 		$new_category_item .='<input type="text" class="tkugp_category_item_add_category" value="'.$item['title'].'" id="tkugp_category_item_title_'.$ID.'" name="tkugp_category_item['.$ID.'][title]" />';
 		$new_category_item .='<input type="hidden"  value="'.$item['cat_id'].'" id="tkugp_category_item_cat_id_'.$ID.'" name="tkugp_category_item['.$ID.'][cat_id]" />';
+		$new_category_item .='<p class="description">Press "Enter" Key to Add Category</p>';
 		$new_category_item .='</div>';
 		$new_category_item .='<div>';
 		$new_category_item .='<label>Add Tag</label>';
