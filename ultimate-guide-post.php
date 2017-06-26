@@ -5,7 +5,7 @@ Description: Create expanded list posts that rank highly in google and get socia
 Plugin URI: http://www.mindheros.com
 Author: Nick Julia
 Author URI: http://www.mindheros.com/about
-Version: 2.001
+Version: 2.005
 notes: Added support for comments and list item name in admin
 License: GPL2
 Text Domain: tkugp
@@ -28,7 +28,7 @@ function tkugp_front_scripts(){
 		wp_enqueue_style( 'tkugp-style', plugins_url( 'css/guide-post.css', __FILE__));
 	}
 		
-	wp_enqueue_script( 'tkugp-script', plugins_url( 'js/guide-post.js', __FILE__), array('jquery'), '4.0' );
+	wp_enqueue_script( 'tkugp-script', plugins_url( 'js/guide-post.js', __FILE__), array('jquery'), '5.2' );
 	wp_enqueue_script('jquery');
 }
 

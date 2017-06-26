@@ -322,8 +322,17 @@ $(document).on('click', '.tkugp-ol li', function(event) {
 		$('.tkugp-listitem-single').each(function(itemindex, el) {
 
 				var $this = $(this);
-				$this.hide();
-
+				/* If a selection is made , start by hiding the listitem-single. 
+				   Else it means no selection is made and the listitem-single should be shown.	
+				 */
+				if (choices.length > 0) {
+					$this.hide();
+				} else {
+					$this.show();
+					$this.find('.tkugp-item-terms span').removeClass('tkugp-selected-term');
+				}
+				
+				
 				tkugp_selected = [];
 				
 				if( choices.length > 0 && tkugp_display_item($this, choices, choices_length) ){
